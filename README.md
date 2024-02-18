@@ -1684,7 +1684,6 @@ test
 ## 스웨거를 통한 API 테스트 참고 사항
 - 스웨거 UI 접근 url: /swagger-ui.html
 ##### 토큰 인증 적용 방법
-![토큰 테스트 방법.png](static%2Fimages%2F%ED%86%A0%ED%81%B0%20%ED%85%8C%EC%8A%A4%ED%8A%B8%20%EB%B0%A9%EB%B2%95.png)
 1. 로그인 요청을 성공하여 받은 토큰을 등록하기 위해 Authorize 버튼을 클릭합니다.
 2. value 텍스트 필드에 토큰을 입력해줍니다.
 3. Authorize 버튼을 클릭하여 토큰 인증을 적용하여 나머지 api들을 테스트 하십시오.

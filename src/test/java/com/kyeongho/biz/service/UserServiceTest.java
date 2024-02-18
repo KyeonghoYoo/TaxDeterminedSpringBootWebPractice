@@ -1,12 +1,14 @@
 package com.kyeongho.biz.service;
 
+import com.kyeongho.biz.entity.UsersEntity;
+import com.kyeongho.biz.model.RefundDto;
+import com.kyeongho.biz.model.UsersDto;
+import com.kyeongho.biz.repository.UsersRepository;
+import com.kyeongho.common.ScrapApiClient;
 import com.kyeongho.common.model.ScrapRequest;
 import com.kyeongho.common.model.ScrapResponseDto;
 import com.kyeongho.config.ScrapApiClientTestConfig;
 import com.kyeongho.errors.execption.BusinessException;
-import com.kyeongho.biz.entity.UsersEntity;
-import com.kyeongho.biz.model.RefundDto;
-import com.kyeongho.biz.repository.UsersRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -46,6 +48,8 @@ class UserServiceTest {
     UserService userService;
     @Autowired
     UsersRepository usersRepository;
+    @Autowired
+    ScrapApiClient scrapApiClient;
 
     @Test
     void 회원가입() {
@@ -112,12 +116,18 @@ class UserServiceTest {
         String name = "홍길동";
         String regNo = "860824-1655068";
         userService.signUp(userId, password, name, regNo);
+        UsersDto usersDto = userService.getUsersDtoByUserId(userId);
 
         // when
-        ScrapResponseDto scrapResponseDto = assertDoesNotThrow(() -> userService.saveScrapData(userId, userService.scrapApiClient.requestScrap(ScrapRequest.of(
-                usersEntity.getName(),
-                usersEntity.getRegNo()
-        ))));
+        ScrapResponseDto scrapResponseDto = assertDoesNotThrow(() ->
+                userService.saveScrapData(
+                        userId,
+                        scrapApiClient.requestScrap(ScrapRequest.of(
+                                usersDto.getName(),
+                                usersDto.getRegNo()
+                        ))
+                )
+        );
 
         // then
         assertThat(scrapResponseDto, notNullValue());
@@ -132,17 +142,21 @@ class UserServiceTest {
         String name = "홍길동";
         String regNo = "860824-1655068";
         userService.signUp(userId, password, name, regNo);
+        UsersDto usersDto = userService.getUsersDtoByUserId(userId);
 
         // when
-        ScrapResponseDto scrapResponseDto = userService.saveScrapData(userId, userService.scrapApiClient.requestScrap(ScrapRequest.of(
-                usersEntity.getName(),
-                usersEntity.getRegNo()
-        )));
+        ScrapResponseDto scrapResponseDto = userService.saveScrapData(
+                userId,
+                scrapApiClient.requestScrap(ScrapRequest.of(
+                        usersDto.getName(),
+                        usersDto.getRegNo()
+                ))
+        );
 
         // then
         Cache simpleCache = checkNotNull(cacheManager.getCache("scrap"));
         ScrapResponseDto cachedScrapResponseDto
-                = simpleCache.get(SimpleKeyGenerator.generateKey(userId), ScrapResponseDto.class);
+                = simpleCache.get(SimpleKeyGenerator.generateKey(ScrapRequest.of(name, regNo)), ScrapResponseDto.class);
         assertThat(cachedScrapResponseDto, notNullValue());
         assertThat(cachedScrapResponseDto, is(scrapResponseDto));
     }
@@ -155,18 +169,19 @@ class UserServiceTest {
         String name = "홍길동";
         String regNo = "860824-1655068";
         userService.signUp(userId, password, name, regNo);
-        userService.saveScrapData(userId, userService.scrapApiClient.requestScrap(ScrapRequest.of(
-                usersEntity.getName(),
-                usersEntity.getRegNo()
-        )));
+        UsersDto usersDto = userService.getUsersDtoByUserId(userId);
+
+        // when
+        ScrapResponseDto scrapResponseDto = scrapApiClient.requestScrap(ScrapRequest.of(
+                usersDto.getName(),
+                usersDto.getRegNo()
+        ));
+        userService.saveScrapData(userId, scrapResponseDto);
         Cache simpleCache = checkNotNull(cacheManager.getCache("scrap"));
         simpleCache.evictIfPresent(SimpleKeyGenerator.generateKey(userId));
 
         // when…then
-        assertThrows(BusinessException.class, () -> userService.saveScrapData(userId, userService.scrapApiClient.requestScrap(ScrapRequest.of(
-                usersEntity.getName(),
-                usersEntity.getRegNo()
-        ))))
+        assertThrows(BusinessException.class, () -> userService.saveScrapData(userId, scrapResponseDto))
                 .printStackTrace();
     }
 
@@ -178,10 +193,12 @@ class UserServiceTest {
         String name = "홍길동";
         String regNo = "860824-1655068";
         userService.signUp(userId, password, name, regNo);
-        userService.saveScrapData(userId, userService.scrapApiClient.requestScrap(ScrapRequest.of(
-                usersEntity.getName(),
-                usersEntity.getRegNo()
-        )));
+        UsersDto usersDto = userService.getUsersDtoByUserId(userId);
+        ScrapResponseDto scrapResponseDto = scrapApiClient.requestScrap(ScrapRequest.of(
+                usersDto.getName(),
+                usersDto.getRegNo()
+        ));
+        userService.saveScrapData(userId, scrapResponseDto);
 
         // when
         RefundDto refund = userService.refund(userId);

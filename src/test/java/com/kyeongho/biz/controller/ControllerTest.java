@@ -220,6 +220,8 @@ class ControllerTest {
         File file = new File(currentFile.getAbsolutePath() + "/src/test/resources/ScrapResponse.json");
         ScrapResponseDto scrapResponseDto = new ObjectMapper().readValue(file, ScrapResponseDto.class);
 
+        given(userService.getUsersDtoByUserId(userId))
+                .willReturn(UsersDto.of(null, userId, name, "860824-1655068", false));
         given(userService.saveScrapData(userId, scrapResponseDto))
                 .willReturn(scrapResponseDto);
 

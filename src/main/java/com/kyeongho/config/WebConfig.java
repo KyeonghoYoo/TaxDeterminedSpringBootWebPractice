@@ -8,6 +8,8 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.util.Base64;
+
 /**
  *
  * @author 유경호 ykh6242@naver.com
@@ -28,10 +30,10 @@ public class WebConfig implements WebMvcConfigurer {
     @Bean
     public RestTemplate restTemplate(
             RestTemplateBuilder builder,
-            @Value("${szs.scrap-api-server-url}") String scrapApiServerUrl
+            @Value("${scrap-api-server-url}") String scrapApiServerUrl
             ) {
         return builder
-                .rootUri(scrapApiServerUrl)
+                .rootUri(new String(Base64.getDecoder().decode(scrapApiServerUrl)))
                 .build();
     }
 }

@@ -10,7 +10,6 @@ import com.kyeongho.biz.model.UsersDto;
 import com.kyeongho.biz.repository.IncomeTaxDeductionRepository;
 import com.kyeongho.biz.repository.UsersRepository;
 import com.kyeongho.common.ApiStatus;
-import com.kyeongho.common.ScrapApiClient;
 import com.kyeongho.common.definitions.Deduction;
 import com.kyeongho.common.model.ScrapResponseDto;
 import com.kyeongho.errors.execption.BusinessException;
@@ -42,7 +41,6 @@ public class UserServiceImpl implements UserService {
     private static final DecimalFormat decimalFormat = new DecimalFormat("#,###.###");
 
     private final PasswordEncoder passwordEncoder;
-    private final ScrapApiClient scrapApiClient;
     private final UsersRepository usersRepository;
     private final IncomeTaxDeductionRepository incomeTaxDeductionRepository;
 
@@ -98,12 +96,10 @@ public class UserServiceImpl implements UserService {
         ScrapResponseDto.JsonList jsonList = data.getJsonList();
 
         BigDecimal totalSalaryAmount = data.getJsonList().getIncomeInfoList().stream()
-                .map(incomeInfo -> {
-                    return new BigDecimal(incomeInfo.getTotalSalaryAmount());
-                })
+                .map(incomeInfo -> new BigDecimal(incomeInfo.getTotalSalaryAmount().replace(",", "")))
                 .reduce(BigDecimal::add)
-                .get();
-        BigDecimal calculatedIncomeTax = new BigDecimal(jsonList.getCalculatedIncomeTax());
+                .orElse(BigDecimal.ZERO);
+        BigDecimal calculatedIncomeTax = new BigDecimal(jsonList.getCalculatedIncomeTax().replace(",", ""));
 
         List<IncomeTaxDeductionEntity> incomeTaxDeductionEntities = jsonList.getIncomeTaxDeductionList().stream()
                 .map(incomeTaxDeduction -> {

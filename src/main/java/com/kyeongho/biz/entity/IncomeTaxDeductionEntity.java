@@ -7,7 +7,6 @@ import lombok.*;
 import javax.persistence.*;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
-import java.text.ParseException;
 
 /**
  *
@@ -44,7 +43,7 @@ public class IncomeTaxDeductionEntity extends BaseEntity {
 
     public static IncomeTaxDeductionEntity from(ScrapResponseDto.IncomeTaxDeduction incomeTaxDeduction) {
         return new IncomeTaxDeductionEntity(
-                new BigDecimal(incomeTaxDeduction.getAmount()),
+                new BigDecimal(incomeTaxDeduction.getAmount().replace(",", "")),
                 incomeTaxDeduction.getDeductionClassification()
         );
     }

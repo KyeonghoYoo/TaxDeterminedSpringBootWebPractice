@@ -72,5 +72,4 @@ jwt:
     expiry-seconds: 3600
     ignore-url: [ /webjars/**, /static/**, /favicon.ico, /templates/**, /h2/**, /h2-console/**, /v3/api-docs, /swagger-resources/**, /**/favicon.*, /*.html, /**/*.html, /**/*.css, /**/*.js, /**/*.bmp, /**/*.png, /v3/api-docs/swagger-config, /**/*.map ]
 
-szs:
-  scrap-api-server-url: https://codetest.3o3.co.kr/v2
+scrap-api-server-url: aHR0cHM6Ly9jb2RldGVzdC4zbzMuY28ua3IvdjI=
