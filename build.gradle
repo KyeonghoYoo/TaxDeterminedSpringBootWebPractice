@@ -1,0 +1,76 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '2.7.18'
+    id 'io.spring.dependency-management' version '1.0.15.RELEASE'
+}
+
+group = 'com.kyeongho'
+version = '1.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = '11'
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    jjwtVersion = "0.12.3"
+    springdocOpenapiVersion = "1.7.0"
+    p6spySpringBootStarterVersion = "1.8.1"
+    guavaVersion = "33.0.0-jre"
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+    compileOnly 'org.projectlombok:lombok'
+    runtimeOnly 'com.h2database:h2'
+    annotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+
+    implementation "org.apache.commons:commons-lang3"
+    implementation "com.google.guava:guava:${guavaVersion}"
+
+    /* queryDSL */
+    implementation("com.querydsl:querydsl-core")
+    implementation("com.querydsl:querydsl-jpa")
+    annotationProcessor("com.querydsl:querydsl-apt:${dependencyManagement.importedProperties['querydsl.version']}:jpa") // querydsl JPAAnnotationProcessor 사용 지정
+    annotationProcessor("jakarta.persistence:jakarta.persistence-api") // java.lang.NoClassDefFoundError(javax.annotation.Entity) 발생 대응
+    annotationProcessor("jakarta.annotation:jakarta.annotation-api") // java.lang.NoClassDefFoundError (javax.annotation.Generated) 발생 대응
+
+    /* JJWT ; JSON Web Token for Java and Android
+     * see https://github.com/jwtk/jjwt?tab=readme-ov-file#java-jwt-json-web-token-for-java-and-android
+     */
+    implementation "io.jsonwebtoken:jjwt-api:${jjwtVersion}"
+    runtimeOnly "io.jsonwebtoken:jjwt-impl:${jjwtVersion}"
+    runtimeOnly "io.jsonwebtoken:jjwt-jackson:${jjwtVersion}"
+
+    /* springdoc-openapi (Swagger UI 포함)*/
+    implementation "org.springdoc:springdoc-openapi-ui:${springdocOpenapiVersion}"
+    implementation "org.springdoc:springdoc-openapi-security:${springdocOpenapiVersion}"
+
+    /* p6spy */
+    implementation "com.github.gavlyukovskiy:p6spy-spring-boot-starter:${p6spySpringBootStarterVersion}"
+
+}
+
+test {
+    useJUnitPlatform()
+}
+
+/* clean 태스크 실행시 QClass 삭제 */
+clean {
+    delete file('src/main/generated') // 인텔리제이 Annotation processor 생성물 생성위치
+}

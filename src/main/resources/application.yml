@@ -1,0 +1,76 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+
+# swagger-ui custom path
+springdoc:
+  version: 1.0.0
+  swagger-ui:
+    path: /swagger-ui.html
+
+spring:
+  application:
+    name: yookyeongho
+  h2:
+    console:
+      enabled: true
+  sql:
+    init:
+      platform: h2
+      mode: embedded
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:localhost;MODE=MYSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    hikari:
+      minimum-idle: 1
+      maximum-pool-size: 5
+      pool-name: H2_DB
+  cache:
+    cache-names: scrap
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    # JPA DDL configuration properties
+    generate-ddl: true
+    # OSIV configuration property
+    open-in-view: false
+    properties:
+      # hibernate configuration properties
+      hibernate:
+        default_batch_fetch_size: 100
+        show_sql: true
+        format_sql: true
+        use_sql_comments: true
+  # Console 출력시 컬러 출력
+  output:
+    ansi:
+      enabled: always
+logging:
+  level:
+    org.hibernate.sql: debug
+decorator:
+  datasource:
+    # p6spy - SQL 쿼리 로그에 바인딩된 변수들을 출력해줌.
+    # 디버깅시 용이하나 이를 위한 비용이 들기 때문에 운영환경에서는 제외
+    p6spy:
+      enable-logging: true
+      multiline: true
+      logging: slf4j
+      tracing:
+        include-parameter-values: true
+
+jwt:
+  token:
+    header: Authorization
+    issuer: yookyengho
+    client-secret: yookyengho_enough_long_secret_key
+    expiry-seconds: 3600
+    ignore-url: [ /webjars/**, /static/**, /favicon.ico, /templates/**, /h2/**, /h2-console/**, /v3/api-docs, /swagger-resources/**, /**/favicon.*, /*.html, /**/*.html, /**/*.css, /**/*.js, /**/*.bmp, /**/*.png, /v3/api-docs/swagger-config, /**/*.map ]
+
+szs:
+  scrap-api-server-url: https://codetest.3o3.co.kr/v2
