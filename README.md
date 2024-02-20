@@ -1,5 +1,7 @@
 # Spring Boot Web 연습 프로젝트
 
+Spring Boot를 활용하여 개발한 사용자의 세금 환급액을 계산해주는 데모 프로젝트 입니다.
+
 ---
 ## 어플리케이션 정보
 
@@ -478,13 +480,13 @@ public class UsersEntity extends BaseEntity {
   private String password;
   private String name;
   private String regNo;
-  @Getter(AccessLevel.NONE)
+  
   @Setter
-  private Boolean scrap;
+  private boolean scrap;
   @Setter
-  private Double totalSalaryAmount;
+  private BigDecimal totalSalaryAmount;
   @Setter
-  private Double calculatedIncomeTax;
+  private BigDecimal calculatedIncomeTax;
 
   @OneToMany(mappedBy = "usersEntity")
   private final List<IncomeTaxDeductionEntity> incomeTaxDeductionEntities = new ArrayList<>();
@@ -508,10 +510,6 @@ public class UsersEntity extends BaseEntity {
 
   public String getRegNo() {
     return EncryptionUtils.decryptAES256(regNo);
-  }
-
-  public Boolean isScraped() {
-    return scrap;
   }
 
   @Override
@@ -554,12 +552,10 @@ import ...
 @ToString
 public class IncomeTaxDeductionEntity extends BaseEntity {
 
-  private static final DecimalFormat format = new DecimalFormat("#,##0.###");
-
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long incomeTaxDeductionNo;
-  private Double amount;
+  private BigDecimal amount;
   private String deductionClassification;
 
   @ManyToOne(fetch = FetchType.LAZY)
@@ -569,7 +565,7 @@ public class IncomeTaxDeductionEntity extends BaseEntity {
   private UsersEntity usersEntity;
 
   public IncomeTaxDeductionEntity(
-          Double amount,
+          BigDecimal amount,
           String deductionClassification) {
     this.amount = amount;
     this.deductionClassification = deductionClassification;
@@ -578,7 +574,7 @@ public class IncomeTaxDeductionEntity extends BaseEntity {
   public static IncomeTaxDeductionEntity from(ScrapResponseDto.IncomeTaxDeduction incomeTaxDeduction) {
     try {
       return new IncomeTaxDeductionEntity(
-              format.parse(incomeTaxDeduction.getAmount()).doubleValue(),
+              new BigDecimal(incomeTaxDeduction.getAmount().replace(",", "")),
               incomeTaxDeduction.getDeductionClassification()
       );
     } catch (ParseException e) {
@@ -880,10 +876,10 @@ public class Controller {
                       request.getUserId(),
                       request.getPassword()
               ));
-      UsersEntity usersEntity = (UsersEntity) authentication.getDetails();
+      UsersDto usersDto = (UsersDto) authentication.getDetails();
       String token = jwt.create(Jwt.Payload.of(
-              usersEntity.getName(),
-              usersEntity.getUserId()
+              usersDto.getName(),
+              usersDto.getUserId()
       ));
       SecurityContextHolder.getContext().setAuthentication(authentication);
       response.setHeader(jwtTokenProperties.getHeader(), "Bearer " + token);
@@ -911,7 +907,7 @@ public class Controller {
     
         private JwtAuthenticationToken processUserAuthentication(final String userId, final String password) {
             try {
-                UsersEntity user = userService.login(userId, password);
+                usersDto user = userService.login(userId, password);
                 JwtAuthenticationToken authenticated =
                         new JwtAuthenticationToken(
                                 new JwtAuthentication(user.getName(),
@@ -999,14 +995,14 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     
     @Override
-    public UsersEntity login(String userId, String password) {
+    public UsersDto login(String userId, String password) {
       checkNotNull(userId, "ID must be provided");
       checkNotNull(password, "password must be provided");
       UsersEntity usersEntity = usersRepository.findByUserId(userId)
               .orElseThrow(InvalidUserIdException::new);
-  
+
       if (usersEntity.login(passwordEncoder, password)) {
-        return usersEntity;
+        return UsersDto.from(usersEntity);
       } else {
         throw new BadCredentialException();
       }
@@ -1241,13 +1237,25 @@ public class Controller {
     public ApiUtils.ApiResult<ScrapResponseDto> scrap(
             @AuthenticationPrincipal JwtAuthentication authentication
     ) {
-        return success(userService.scrap(authentication.userId));
+      UsersDto usersDto = userService.getUsersDtoByUserId(authentication.userId);
+      ScrapResponseDto scrapResponseDto = scrapApiClient.requestScrap(ScrapRequest.of(
+              usersDto.getName(),
+              usersDto.getRegNo()
+      ));
+
+      try {
+        userService.saveScrapData(authentication.userId, scrapResponseDto);
+      } catch (BusinessException exception) {
+        log.error(exception.getMessage());
+      }
+
+      return success(scrapResponseDto);
     }
 }
 
 ```
 - Spring Security Context로 부터 인증된 회원의 정보를 `authentication` 파라미터로 넘겨 받음.
-- `authentication` 파라미터에서 회원 아이디를 추출하여 `userService#scrap`을 호출함.
+- `authentication` 파라미터에서 회원 아이디를 추출하여 `userService#saveScrapData`을 호출함.
 
 
 #### business layer
@@ -1266,41 +1274,25 @@ public class UserServiceImpl implements UserService {
     private final UsersRepository usersRepository;
     private final IncomeTaxDeductionRepository incomeTaxDeductionRepository;
     
-    @Cacheable("scrap")
     @Transactional
     @Override
-    public ScrapResponseDto scrap(String userId) {
+    public ScrapResponseDto saveScrapData(String userId, ScrapResponseDto scrapResponseDto) {
         UsersEntity usersEntity = usersRepository.findByUserId(userId)
                 .orElseThrow(NotUserIdFoundException::new);
-        if (Boolean.TRUE.equals(usersEntity.isScraped())) {
+        if (Boolean.TRUE.equals(usersEntity.isScrap())) {
           throw new BusinessException("이미 스크랩된 유저입니다.", ApiStatus.BAD_REQUEST);
         }
-    
-        /* scrap api 요청 */
-        ScrapResponseDto scrapResponseDto = scrapApiClient.requestScrap(ScrapRequest.of(
-                usersEntity.getName(),
-                usersEntity.getRegNo()
-        ));
-    
+  
         /* 데이터 추출 */
         ScrapResponseDto.ResponseData data = scrapResponseDto.getData();
         ScrapResponseDto.JsonList jsonList = data.getJsonList();
-    
-        double totalSalaryAmount = data.getJsonList().getIncomeInfoList().stream()
-                .mapToDouble(incomeInfo -> {
-                  try {
-                    return decimalFormat.parse(incomeInfo.getTotalSalaryAmount()).doubleValue();
-                  } catch (ParseException e) {
-                    throw new IllegalStateException("스크랩 api로 부터 반환된 값이 format에 맞지않습니다.");
-                  }
-                })
-                .sum();
-        double calculatedIncomeTax;
-        try {
-          calculatedIncomeTax = decimalFormat.parse(jsonList.getCalculatedIncomeTax()).doubleValue();
-        } catch (ParseException e) {
-          throw new IllegalStateException("스크랩 api로 부터 반환된 값이 format에 맞지않습니다.");
-        }
+  
+        BigDecimal totalSalaryAmount = data.getJsonList().getIncomeInfoList().stream()
+                .map(incomeInfo -> new BigDecimal(incomeInfo.getTotalSalaryAmount().replace(",", "")))
+                .reduce(BigDecimal::add)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal calculatedIncomeTax = new BigDecimal(jsonList.getCalculatedIncomeTax().replace(",", ""));
+  
         List<IncomeTaxDeductionEntity> incomeTaxDeductionEntities = jsonList.getIncomeTaxDeductionList().stream()
                 .map(incomeTaxDeduction -> {
                   IncomeTaxDeductionEntity incomeTaxDeductionEntity = IncomeTaxDeductionEntity.from(incomeTaxDeduction);
@@ -1308,13 +1300,13 @@ public class UserServiceImpl implements UserService {
                   return incomeTaxDeductionEntity;
                 })
                 .collect(Collectors.toList());
-    
+  
         /* 변경사항 적용 */
         incomeTaxDeductionRepository.saveAll(incomeTaxDeductionEntities);
         usersEntity.setTotalSalaryAmount(totalSalaryAmount);
         usersEntity.setCalculatedIncomeTax(calculatedIncomeTax);
         usersEntity.setScrap(true);
-    
+  
         return scrapResponseDto;
     }
 }
@@ -1350,6 +1342,7 @@ public class RestTemplateScrapApiClient implements ScrapApiClient {
 
     private final RestTemplate restTemplate;
 
+    @Cacheable("scrap")
     @Override
     public ScrapResponseDto requestScrap(ScrapRequest request) {
         ScrapResponseDto scrapResponseDto
@@ -1536,46 +1529,57 @@ public class UserServiceImpl implements UserService {
     public RefundDto refund(String userId) {
         UsersEntity usersEntity = usersRepository.findByUserIdJoinFetchIncomeTaxDeductionEntities(userId)
                 .orElseThrow(NotUserIdFoundException::new);
-        if (Boolean.FALSE.equals(usersEntity.isScraped())) {
+  
+        if (Boolean.FALSE.equals(usersEntity.isScrap())) {
           throw new BusinessException("환급액 조회 전에 스크랩을 먼저 진행해주십시오.", ApiStatus.BAD_REQUEST);
         }
+  
         List<IncomeTaxDeductionEntity> incomeTaxDeductionEntities = usersEntity.getIncomeTaxDeductionEntities();
   
-        double taxDetermined = usersEntity.getCalculatedIncomeTax() - usersEntity.getCalculatedIncomeTax() * 0.55;
-        double totalSalaryAmount = usersEntity.getTotalSalaryAmount();
-        double retirementPensionTaxCredit = 0.0;
-        double totalSpecialTaxCredit = 0.0;
-        double standardTaxCredit = 0.0;
+        BigDecimal taxDetermined = usersEntity.getCalculatedIncomeTax().subtract(usersEntity.getCalculatedIncomeTax().multiply(BigDecimal.valueOf(0.55)));
+        BigDecimal totalSalaryAmount = usersEntity.getTotalSalaryAmount();
+        BigDecimal retirementPensionTaxCredit = BigDecimal.ZERO;
+        BigDecimal totalSpecialTaxCredit = BigDecimal.ZERO;
+        BigDecimal standardTaxCredit = BigDecimal.ZERO;
   
         for (IncomeTaxDeductionEntity incomeTaxDeductionEntity: incomeTaxDeductionEntities) {
           String classifier = incomeTaxDeductionEntity.getDeductionClassification();
           Deduction deduction = Deduction.of(classifier)
                   .orElseThrow(() -> new IllegalStateException("해당 소득공제 타입과 일치하는 com.kyeongho.common.definitions.Deduction이 없습니다."));
-          double amount = incomeTaxDeductionEntity.getAmount();
-          if (deduction == Deduction.MEDICAL_EXPENSES) {
-            amount = amount - totalSalaryAmount * 0.03;
-            amount = Math.max(amount, 0.0);
-          }
-          double result = deduction.calculate(amount);
-          if (deduction == Deduction.RETIREMENT_PENSION) {
-            retirementPensionTaxCredit = result;
-          } else {
-            totalSpecialTaxCredit += result;
+  
+          BigDecimal amount = incomeTaxDeductionEntity.getAmount();
+  
+          switch (deduction) {
+            case MEDICAL_EXPENSES:
+              amount = amount.subtract(totalSalaryAmount.multiply(BigDecimal.valueOf(0.03)));
+              totalSpecialTaxCredit = totalSpecialTaxCredit.add(deduction.calculate(amount).max(BigDecimal.ZERO));
+              break;
+            case RETIREMENT_PENSION:
+              retirementPensionTaxCredit = deduction.calculate(amount);
+              break;
+            default:
+              totalSpecialTaxCredit = totalSpecialTaxCredit.add(deduction.calculate(amount));
+  
           }
         }
   
-        if (totalSpecialTaxCredit < 130000.0) {
-          standardTaxCredit = 130000.0;
-          totalSpecialTaxCredit = 0;
+        if (totalSpecialTaxCredit.compareTo(BigDecimal.valueOf(130000.0)) <= 0) {
+          standardTaxCredit = BigDecimal.valueOf(130000.0);
+          totalSpecialTaxCredit = BigDecimal.ZERO;
         }
-        taxDetermined = taxDetermined - totalSpecialTaxCredit - standardTaxCredit - retirementPensionTaxCredit;
-        if (taxDetermined < 0) {
-          taxDetermined = 0.0;
+  
+        taxDetermined = taxDetermined.subtract(totalSpecialTaxCredit)
+                .subtract(standardTaxCredit)
+                .subtract(retirementPensionTaxCredit);
+  
+        if (taxDetermined.compareTo(BigDecimal.ZERO) < 0) {
+          taxDetermined = BigDecimal.ZERO;
         }
+  
         return RefundDto.of(
                 usersEntity.getName(),
-                decimalFormat.format(taxDetermined),
-                decimalFormat.format(retirementPensionTaxCredit)
+                decimalFormat.format(taxDetermined.doubleValue()),
+                decimalFormat.format(retirementPensionTaxCredit.doubleValue())
         );
     }
 }
@@ -1585,46 +1589,49 @@ public class UserServiceImpl implements UserService {
   - 계산 중 소득공제 및 퇴직연금세액공제금액에 대한 계산은 [Deduction.java](src%2Fmain%2Fjava%2Fcom%2Fkyeongho%2Fcommon%2Fdefinitions%2FDeduction.java) Enum 클래스에 정의하여 활용하였음.
     ```java
     public enum Deduction {
-        INSURANCE_PREMIUM(         
-                "보험료",         
-                amount -> amount * 0.12 
-        ),   
-        EDUCATION_EXPENSES(         
-                "교육비",         
-                amount -> amount * 0.15 
-        ),   
-        DONATIONS(         
-                "기부금",         
-                amount -> amount * 0.15 
-        ),   
-        MEDICAL_EXPENSES(         
-                "의료비",         
-                amount -> amount * 0.15 
-        ),   
-        RETIREMENT_PENSION(         
-                "퇴직연금",         
-                amount -> amount * 0.15 
-        ),   
+
+        INSURANCE_PREMIUM(
+                "보험료",
+                0.12
+        ),
+        EDUCATION_EXPENSES(
+                "교육비",
+                0.15
+        ),
+        DONATIONS(
+                "기부금",
+                0.15
+        ),
+        MEDICAL_EXPENSES(
+                "의료비",
+                0.15
+        ),
+        RETIREMENT_PENSION(
+                "퇴직연금",
+                0.15
+        ),
         ;
-        private final String classifier;
-        private final DoubleUnaryOperator calculator;
     
-        Deduction(String classifier, DoubleUnaryOperator calculator) {     
-            this.classifier = classifier;     
-            this.calculator = calculator; 
+        private final String classifier;
+    
+        private final UnaryOperator<BigDecimal> calculator;
+    
+        Deduction(String classifier, double multiplyValue) {
+            this.classifier = classifier;
+            this.calculator = bigDecimal -> bigDecimal.multiply(BigDecimal.valueOf(multiplyValue));
         }
-        
-        public double calculate(Double amount) {     
-            return calculator.applyAsDouble(amount); 
+    
+        public BigDecimal calculate(BigDecimal amount) {
+            return calculator.apply(amount);
         }
-        
-        public static Optional<Deduction> of(String classifier) {     
-            for (Deduction deduction : Deduction.values()) {     
-                if(deduction.classifier.equalsIgnoreCase(classifier)){     
-                    return Optional.of(deduction); 
-                } 
-            }   
-            return Optional.empty(); 
+    
+        public static Optional<Deduction> of(String classifier) {
+            for (Deduction deduction : Deduction.values()) {
+                if(deduction.classifier.equalsIgnoreCase(classifier)){
+                    return Optional.of(deduction);
+                }
+            }
+            return Optional.empty();
         }
     }
     ```

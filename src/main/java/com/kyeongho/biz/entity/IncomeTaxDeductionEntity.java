@@ -20,8 +20,6 @@ import java.text.DecimalFormat;
 @ToString
 public class IncomeTaxDeductionEntity extends BaseEntity {
 
-    private static final DecimalFormat format = new DecimalFormat("#,##0.###");
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long incomeTaxDeductionNo;
